@@ -1,0 +1,68 @@
+### IntelliJ / GoLand ###
+**.idea/
+**.iml
+**out/
+**.ipr
+**.iws
+
+# User-specific stuff
+**.swp
+**.swo
+**.bak
+**.tmp
+
+# OS-specific
+**.DS_Store
+**Thumbs.db
+
+### Java ###
+# Compiled class files
+**.class
+
+# Log files
+**.log
+
+# BlueJ
+**.ctxt
+
+# Mobile Tools for Java (J2ME)
+**.mtj.tmp/
+
+# Package Files #
+**.jar
+**.war
+**.ear
+
+# Java annotation processing
+**.apt_generated/
+**.apt_generated_test/
+
+# Virtual machine crash logs
+**hs_err_pid*
+**replay_pid*
+
+# Build directories
+**/bin/
+**/build/
+**/target/
+
+### Go ###
+# Binaries
+**.exe
+**.exe~
+**.dll
+**.so
+**.dylib
+**.test
+
+# Go build output
+**.out
+
+# Dependency directories (sometimes generated)
+**vendor/
+
+# Go workspace
+**.modcache/
+**go.work
+**go.work.sum
+
