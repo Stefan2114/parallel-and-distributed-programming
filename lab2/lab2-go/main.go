@@ -34,14 +34,20 @@ func (c *Consumer) consume() {
 func main() {
 	vector1 := []int{1, 3, -2}
 	vector2 := []int{4, -1, 5}
-	valueChan := make(chan int, len(vector1))
-	resultChan := make(chan int)
+	valueChan := make(chan int)
+	resultChan1 := make(chan int)
+	resultChan2 := make(chan int)
 
 	producer := Producer{valueChan}
-	consumer := Consumer{valueChan, resultChan}
+	consumer1 := Consumer{valueChan, resultChan1}
+	consumer2 := Consumer{valueChan, resultChan2}
 	go producer.scalarProduct(vector1, vector2)
-	go consumer.consume()
-	sum := <-resultChan
-	fmt.Println("result:", sum)
+	go consumer1.consume()
+	go consumer2.consume()
+	sum1 := <-resultChan1
+	sum2 := <-resultChan2
+	fmt.Println("result: 1", sum1)
+	fmt.Println("result: 2", sum2)
+	fmt.Println("result: 3", sum1+sum2)
 
 }
