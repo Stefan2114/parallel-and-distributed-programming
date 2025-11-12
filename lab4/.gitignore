@@ -1,0 +1,20 @@
+# Compiled output directories
+[Bb]in/
+[Oo]bj/
+
+# User-specific files (Visual Studio)
+*.suo
+*.user
+
+# IDE-specific directories
+.vs/
+.idea/
+.vscode/
+
+# Common OS files
+.DS_Store
+Thumbs.db
+
+# Rider (JetBrains)
+.idea_solution/
+*.sln.iml
