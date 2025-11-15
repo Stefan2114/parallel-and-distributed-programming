@@ -2,39 +2,42 @@ package main
 
 import (
 	"fmt"
+	"math/big"
 	"math/rand"
 	"sync"
 	"time"
 )
 
-const MaxVal = 10
+const MaxVal = 30000000
 
-func computeElement(k int, polyA, polyB, result []int) {
+func computeElement(k int, polyA, polyB, result []*big.Int) {
 
 	lenA := len(polyA)
 	lenB := len(polyB)
-	var localSum int = 0
+	localSum := big.NewInt(0)
+	term := new(big.Int)
 
 	for i := 0; i < lenA; i++ {
 		j := k - i
 
 		if j >= 0 && j < lenB {
-			localSum += polyA[i] * polyB[j]
+			term.Mul(polyA[i], polyB[j])
+			localSum.Add(localSum, term)
 		}
 	}
 	result[k] = localSum
 }
 
-func PolyMulParallel(polyA, polyB []int) []int {
+func PolyMulParallel(polyA, polyB []*big.Int) []*big.Int {
 
 	lenA := len(polyA)
 	lenB := len(polyB)
 	if lenA == 0 || lenB == 0 {
-		return []int{}
+		return []*big.Int{}
 	}
 
 	resultLen := lenA + lenB - 1
-	result := make([]int, resultLen)
+	result := make([]*big.Int, resultLen)
 	var wg sync.WaitGroup
 
 	for k := 0; k < resultLen; k++ {
@@ -49,16 +52,16 @@ func PolyMulParallel(polyA, polyB []int) []int {
 	return result
 }
 
-func PolyMulParallelWithFixNrThreads(polyA, polyB []int, nrThreads int) []int {
+func PolyMulParallelWithFixNrThreads(polyA, polyB []*big.Int, nrThreads int) []*big.Int {
 
 	lenA := len(polyA)
 	lenB := len(polyB)
 	if lenA == 0 || lenB == 0 {
-		return []int{}
+		return []*big.Int{}
 	}
 
 	resultLen := lenA + lenB - 1
-	result := make([]int, resultLen)
+	result := make([]*big.Int, resultLen)
 	var wg sync.WaitGroup
 	baseWork := resultLen / nrThreads
 	remainder := resultLen % nrThreads
@@ -87,21 +90,21 @@ func PolyMulParallelWithFixNrThreads(polyA, polyB []int, nrThreads int) []int {
 	return result
 }
 
-func newPolynomial(size int) []int {
-	polynomial := make([]int, size)
+func newPolynomial(size int) []*big.Int {
+	polynomial := make([]*big.Int, size)
 	for i := 0; i < size; i++ {
-		polynomial[i] = rand.Intn(MaxVal)
+		polynomial[i] = big.NewInt(rand.Int63n(MaxVal))
 	}
 	return polynomial
 }
 
-func arePolynomialsEqual(p1, p2 []int) bool {
+func arePolynomialsEqual(p1, p2 []*big.Int) bool {
 
 	if len(p1) != len(p2) {
 		return false
 	}
 	for i := 0; i < len(p1); i++ {
-		if p1[i] != p2[i] {
+		if p1[i].Cmp(p2[i]) != 0 {
 			return false
 		}
 	}
@@ -113,16 +116,16 @@ func main() {
 	size1 := 100000
 	size2 := 100000
 
-	nrThreads := 1000000
+	nrThreads := 16
 
-	rand.Seed(time.Now().UnixNano())
+	rand.New(rand.NewSource(time.Now().UnixNano()))
 	p1 := newPolynomial(size1)
 	p2 := newPolynomial(size2)
 
 	start := time.Now()
 	result1 := PolyMulSequential(p1, p2)
 	elapsed := time.Since(start)
-	fmt.Printf("Time for O(n^2) with nr threads: %d is: %v\n", nrThreads, elapsed)
+	fmt.Printf("Time for O(n^2) swquential is: %v\n", elapsed)
 
 	start = time.Now()
 	result2 := PolyMulParallelWithFixNrThreads(p1, p2, nrThreads)

@@ -7,26 +7,27 @@ namespace lab4_client
 {
     public class ContinueWithDownloader : Downloader
     {
+
         class LoopState
         {
             public int ContentLength = -1;
             public bool HeadersParsed = false;
         }
 
-        public ContinueWithDownloader(IPAddress address, int port, string fileName) : base(address, port, fileName) { }
+        public ContinueWithDownloader(IPAddress address, int port,string hostName, string path) : base(address, port, hostName,path) { }
 
         override public Task Run()
         {
             var endPoint = new IPEndPoint(address, port);
             var conn = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            Console.WriteLine($"[Client 2] Connecting for {fileName}...");
+            // Console.WriteLine($"Connecting for {path}...");
 
             return ConnectAsync(conn, endPoint)
                 .ContinueWith(connectTask =>
                 {
                     if (connectTask.IsFaulted) throw connectTask.Exception;
-                    Console.WriteLine($"[Client 2] Connected! ({fileName})");
-                    string request = $"GET {fileName} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+                    // Console.WriteLine($"[Client 2] Connected! ({path})");
+                    string request = $"GET {path} HTTP/1.1\r\nHost: {hostName}\r\nConnection: close\r\n\r\n";
                     byte[] toSendBytes = Encoding.UTF8.GetBytes(request);
                     return SendAsync(conn, toSendBytes);
                 })
@@ -34,7 +35,7 @@ namespace lab4_client
                 .ContinueWith(sendTask =>
                 {
                     if (sendTask.IsFaulted) throw sendTask.Exception; 
-                    Console.WriteLine($"[Client 2] Sent {sendTask.Result} bytes. ({fileName})");
+                    // Console.WriteLine($"Sent {sendTask.Result} bytes. ({path})");
                     var loopTcs = new TaskCompletionSource<bool>();
                     ReceiveLoop(conn, new byte[4096], loopTcs, new StringBuilder(), new LoopState()); 
                     return loopTcs.Task;
@@ -105,7 +106,7 @@ namespace lab4_client
                         }
                     }
                 }
-                Console.WriteLine($"Headers parsed for {fileName}. Content-Length: {state.ContentLength}");
+                // Console.WriteLine($"Headers parsed for {path}. Content-Length: {state.ContentLength}");
             }
         }
 
@@ -116,7 +117,7 @@ namespace lab4_client
                 if (state.HeadersParsed)
                 {
                     conn.Close();
-                    tcs.SetException(new Exception($"Cannot find Content-Length for {fileName}."));
+                    tcs.SetException(new Exception($"Cannot find Content-Length for {path}."));
                     return true;
                 }
                 return false;
@@ -132,7 +133,7 @@ namespace lab4_client
             if (bodyLength >= state.ContentLength)
             {
                 string body = respStr.Substring(bodyStart, state.ContentLength);
-                Console.WriteLine($"\n---File {fileName} Content---\n{body}\n-----------------------------------\n");
+                Console.WriteLine($"\n---File {path} Content---\n{body}\n");
                 
                 conn.Close();
                 tcs.SetResult(true); // Loop is done

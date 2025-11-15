@@ -1,4 +1,5 @@
-﻿
+﻿using System.Net.Sockets; 
+
 using System.Net;
 namespace lab4_client
 {
@@ -6,12 +7,54 @@ namespace lab4_client
     {
         static async Task Main(string[] args)
         {
-            Downloader downloader1 = new AsyncDownloader(IPAddress.Loopback, 8080, "file1");
-            var t1 = downloader1.Run();
-            Downloader downloader2 = new AsyncDownloader(IPAddress.Loopback, 8080, "file2");
-            var t2 = downloader2.Run();
-            await Task.WhenAll(t1, t2);
-            Console.WriteLine("Finished");
+            string url = "http://demo.borland.com/testsite/stadyn_largepagewithimages.html";
+            
+            Console.WriteLine($"--- Preparing to download from {url} ---");
+
+            var uri = new Uri(url);
+            string host = uri.Host;         // "info.cern.ch"
+            string path = uri.AbsolutePath;   // "/index.html"
+            int port = uri.Port;           // 80
+
+            IPAddress ipAddress;
+            try
+            {
+                var hostEntry = await Dns.GetHostEntryAsync(host);
+                ipAddress = hostEntry.AddressList.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+
+                if (ipAddress == null)
+                {
+                    Console.WriteLine("No IPv4 address found for host.");
+                    return;
+                }
+
+                Console.WriteLine($"Host {host} resolved to IP {ipAddress}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"DNS lookup failed: {ex.Message}");
+                return;
+            }
+
+            int nrTasks = 10000;
+            List<Task> tasks = new List<Task>(nrTasks);
+            Downloader downloader = new AsyncDownloader(ipAddress, port, host, path);
+
+            for(int i = 0; i< nrTasks; i++)
+            {
+                tasks.Add(downloader.Run());
+            }            
+
+            try
+            {
+                 await Task.WhenAll(tasks); 
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"One or more downloads failed: {ex.Message}");
+            }
+
+            Console.WriteLine("\n--- All downloads finished ---");
         }
     }
 }

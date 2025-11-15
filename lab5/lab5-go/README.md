@@ -46,31 +46,47 @@
 
 ## 3. Performance Measurements
 
+Measurements for `n=10,000` on a multi-core CPU.
+
+**Run: `nrThreads = 16`**
+
+| Algorithm | Variant                   | Time       |
+| :--- |:--------------------------|:-----------|
+| O(n²) | Sequential                | 2.67 s     |
+| O(n²) | Parallel (Fixed 16)       | 416 ms     |
+| O(n²) | Parallel (Unbounded)      | 834 ms     |
+| Karatsuba | Sequential                | 627 ms     |
+| **Karatsuba** | Parallel (Hybrid 16)      | 218 ms     |
+| Karatsuba | **Parallel (Fine "3^k")** | **144 ms** |
+
+---
+
 Measurements for `n=100,000` on a multi-core CPU.
 
-**Run 1: `nrThreads = 1000`**
+**Run: `nrThreads = 16`**
 
-| Algorithm | Variant | Time |
-| :--- | :--- | :--- |
-| O(n²) | Sequential | 9.059 s |
-| O(n²) | Parallel (Fixed 1000) | 2.066 s |
-| O(n²) | Parallel (Unbounded) | 1.836 s |
-| Karatsuba | Sequential | 612 ms |
-| **Karatsuba** | **Parallel (Hybrid 1000)** | **206 ms** |
-| Karatsuba | Parallel (Fine "3^k") | 274 ms |
+| Algorithm | Variant                  | Time      |
+| :--- |:-------------------------|:----------|
+| O(n²) | Sequential               | 3.38 m    |
+| O(n²) | Parallel (Fixed 16)      | 46.13 s   |
+| O(n²) | Parallel (Unbounded)     | 41.85 s   |
+| Karatsuba | Sequential               | 18.32 s   |
+| **Karatsuba** | **Parallel (Hybrid 16)** | **4.34 s** |
+| Karatsuba | Parallel (Fine "3^k")    | 5.03 s    |
 
 ### Analysis
 
-1.  **O(n²) vs. Karatsuba:** The sequential Karatsuba (612 ms) is **~15x faster** than the sequential O(n²) (9059 ms), proving its superior algorithmic complexity for this problem size.
+1.  **O(n²) vs. Karatsuba:** The sequential Karatsuba algorithm proves its superior complexity. It's **~4.3x faster** than sequential O(n²) at n=10,000 (627 ms vs 2.67 s). This advantage widens significantly at n=100,000, where Karatsuba is **~11.1x faster** (18.32 s vs 3.38 m).
 
-2.  **O(n²) Parallel:** Both parallel O(n²) versions are significantly faster than the sequential one. The "Unbounded" version (1.8s) was slightly faster than the "Fixed" (2.0s), suggesting the Go scheduler handled the massive number of goroutines better than our manual chunking.
+2.  **O(n²) Parallel:** Parallelism provides a major speedup, but the best approach is inconsistent. The "Fixed 16" variant was fastest at n=10,000 (416 ms), while the "Unbounded" variant was fastest at n=100,000 (41.85 s).
 
 3.  **Karatsuba Parallel:**
-    * The **Hybrid (Hybrid 1000)** version is the **fastest overall (206 ms)**, showing a 3x speedup over sequential Karatsuba.
-    * The **Fine "3^k"** (274 ms) was also significantly faster than sequential Karatsuba, but slower than the Hybrid. This shows the Go scheduler is surprisingly good at managing the "fork-bomb," but the controlled semaphore (Hybrid) approach is still more efficient.
+    * At n=10,000, the **Parallel (Fine "3^k")** was the fastest overall (144 ms), achieving a 4.35x speedup over sequential Karatsuba.
+    * At n=100,000, the **Parallel (Hybrid 16)** was the fastest overall (4.34 s), achieving a 4.22x speedup over sequential Karatsuba.
 
 4.  **Effect of `nrThreads`:`nrThreads` was set to an excessive 2,000,000. This *slowed down* both the "Fixed" and "Hybrid" parallel versions (to 2.4s and 294ms, respectively) due to the overhead of managing such a large (and unnecessary) thread/semaphore pool.
 
 ### Conclusion
 
-The **Hybrid Parallel Karatsuba** algorithm (`polyMulKaratsubaParallel`) combined with a right amount of threads is the clear winner, as it uses the fastest algorithm ($O(n^{1.58})$) with an efficient, throttled parallel model. A moderate `nrThreads` (e.g., 1000) provides the best performance, while an excessively large value adds overhead and slows the program down.
+The **Karatsuba** algorithm is the clear algorithmic winner, and its performance gap over O(n²) grows dramatically with the problem size.
+While the "Fine" parallel model was fastest on the smaller dataset, the Parallel (Hybrid 16) Karatsuba is the best and most scalable solution, as it performed best on the largest, most complex workload (n=100,000). This shows that its controlled, throttled approach to parallelism is more efficient and robust for larger tasks than the "fork-bomb" (Fine) model.

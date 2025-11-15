@@ -7,13 +7,17 @@ namespace lab4_client
         protected readonly IPAddress address;
         protected readonly int port;
 
-        protected readonly string fileName;
+        protected readonly string hostName;
 
-        protected Downloader(IPAddress address, int port, string fileName)
+
+        protected readonly string path;
+
+        protected Downloader(IPAddress address, int port, string hostName, string path)
         {
             this.address = address;
             this.port = port;
-            this.fileName = fileName;
+            this.hostName = hostName;
+            this.path = path;
         }
 
         public abstract Task Run();

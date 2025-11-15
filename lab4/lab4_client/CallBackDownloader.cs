@@ -13,14 +13,15 @@ namespace lab4_client
         class DownloadState
         {
             public Socket Conn;
-            public string FileName;
+            public string HostName;
+            public string Path;  
             public byte[] Buffer = new byte[4096];
             public StringBuilder Response = new StringBuilder();
             public bool HeadersParsed = false;
             public int ContentLength = -1;
         }
 
-        public CallbackDownloader(IPAddress address, int port, string fileName) : base(address, port, fileName) { }
+        public CallbackDownloader(IPAddress address, int port,string hostName, string path) : base(address, port,hostName, path) { }
 
         override public Task Run()
         {
@@ -29,13 +30,13 @@ namespace lab4_client
 
             try
             {
-                var state = new DownloadState { Conn = conn, FileName = fileName };
-                Console.WriteLine($"Connecting for {fileName}...");
+                var state = new DownloadState { Conn = conn, HostName = hostName, Path = path };
+                // Console.WriteLine($"Connecting for {path}...");
                 conn.BeginConnect(endPoint, ConnectCallback, state);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error {fileName}: {ex.Message}");
+                Console.WriteLine($"Error {path}: {ex.Message}");
             }
             return _tcs.Task;
         }
@@ -45,16 +46,16 @@ namespace lab4_client
             try
             {
                 state.Conn.EndConnect(ar);
-                Console.WriteLine($"Connected! ({state.FileName})");
+                // Console.WriteLine($"Connected! ({state.Path})");
 
-                string request = $"GET {state.FileName} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+                string request = $"GET {state.Path} HTTP/1.1\r\nHost: {state.HostName}\r\nConnection: close\r\n\r\n";
                 byte[] toSendBytes = Encoding.UTF8.GetBytes(request);
 
                 state.Conn.BeginSend(toSendBytes, 0, toSendBytes.Length, SocketFlags.None, SendCallback, state);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error {state.FileName}: {ex.Message}");
+                Console.WriteLine($"Error {state.Path}: {ex.Message}");
                 state.Conn.Close();   
                 _tcs.SetException(ex);
             }
@@ -66,13 +67,13 @@ namespace lab4_client
             try
             {
                 int sent = state.Conn.EndSend(ar);
-                Console.WriteLine($"Sent {sent} bytes. ({state.FileName})");
+                // Console.WriteLine($"Sent {sent} bytes. ({state.Path})");
 
                 state.Conn.BeginReceive(state.Buffer, 0, state.Buffer.Length, SocketFlags.None, ReceiveCallback, state);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error {state.FileName}: {ex.Message}");
+                Console.WriteLine($"Error {state.Path}: {ex.Message}");
                 state.Conn.Close(); 
                 _tcs.SetException(ex);
             }
@@ -115,7 +116,7 @@ namespace lab4_client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error {state.FileName}: {ex.Message}");
+                Console.WriteLine($"Error {state.Path}: {ex.Message}");
                 state.Conn.Close();
                 _tcs.SetException(ex);
             }
@@ -142,7 +143,7 @@ namespace lab4_client
                         }
                     }
                 }
-                Console.WriteLine($"Headers parsed for {state.FileName}. Content-Length: {state.ContentLength}");
+                // Console.WriteLine($"Headers parsed for {state.Path}. Content-Length: {state.ContentLength}");
             }
         }
 
@@ -157,7 +158,7 @@ namespace lab4_client
                 // This could happen if headers are parsed but no Content-Length is found
                 if (state.HeadersParsed)
                 {
-                    Console.WriteLine($"Cannot find Content-Length for {state.FileName}.");
+                    Console.WriteLine($"Cannot find Content-Length for {state.Path}.");
                     state.Conn.Close();
                     _tcs.SetException(new Exception("No Content-Length header."));
                     return true;
@@ -169,7 +170,7 @@ namespace lab4_client
             if (bodyLength >= state.ContentLength)
             {
                 string body = resp.Substring(bodyStart, state.ContentLength);
-                Console.WriteLine($"\n---File {state.FileName} Content---\n{body}\n-----------------------------------\n");
+                Console.WriteLine($"\n---File {state.Path} Content---\n{body}\n");
                 state.Conn.Close();
                 _tcs.SetResult(true);
                 return true;

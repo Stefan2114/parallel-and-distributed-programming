@@ -1,33 +1,42 @@
 package main
 
-import "sync"
+import (
+	"math/big"
+	"sync"
+)
 
 // A value of 64 is a common choice.
 const KARATSUBA_CUTOFF = 64
 
-func PolyMulSequential(p, q []int) []int {
+func PolyMulSequential(p, q []*big.Int) []*big.Int {
 	lenP := len(p)
 	lenQ := len(q)
 	if lenP == 0 || lenQ == 0 {
-		return []int{}
+		return []*big.Int{}
 	}
 	resultLen := lenP + lenQ - 1
-	result := make([]int, resultLen)
+	result := make([]*big.Int, resultLen)
+	for i := range result {
+		result[i] = big.NewInt(0)
+	}
+	term := new(big.Int)
+
 	for i := 0; i < lenP; i++ {
 		for j := 0; j < lenQ; j++ {
-			result[i+j] += p[i] * q[j]
+			term.Mul(p[i], q[j])
+			result[i+j].Add(result[i+j], term)
 		}
 	}
 	return result
 }
 
-func PolyMulKaratsuba(p, q []int) []int {
+func PolyMulKaratsuba(p, q []*big.Int) []*big.Int {
 	lenP := len(p)
 	lenQ := len(q)
 
 	finalLen := lenP + lenQ - 1
 	if finalLen <= 0 {
-		return []int{}
+		return []*big.Int{}
 	}
 
 	if lenP < KARATSUBA_CUTOFF || lenQ < KARATSUBA_CUTOFF {
@@ -62,40 +71,15 @@ func PolyMulKaratsuba(p, q []int) []int {
 	q1q2 := polyAdd(q1, q2)
 	RMidTerm := PolyMulKaratsuba(p1p2, q1q2)
 
-	// --- The Karatsuba Trick ---
-	// RMid = RMidTerm - RHigh - RLow
-	RMidSub1 := polySub(RMidTerm, RHigh)
-	RMid := polySub(RMidSub1, RLow)
-
-	// --- Combine the results ---
-	// Result = RHigh * X^(2n) + RMid * X^n + RLow
-
-	// The padded length is m*2-1.
-	resultPadded := make([]int, m*2)
-
-	// Add RLow (starts at index 0)
-	copy(resultPadded, RLow)
-
-	// Add RMid (starts at index n)
-	for i, v := range RMid {
-		resultPadded[i+n] += v
-	}
-
-	// Add RHigh (starts at index 2*n)
-	for i, v := range RHigh {
-		resultPadded[i+2*n] += v
-	}
-
-	// Trim the padded result down to the correct final length.
-	return resultPadded[:finalLen]
+	return combineKaratsubaResults(RHigh, RMidTerm, RLow, m, n, lenP, lenQ)
 }
 
-func polyMulKaratsubaParallel(p, q []int, nrThreads int) []int {
+func polyMulKaratsubaParallel(p, q []*big.Int, nrThreads int) []*big.Int {
 	sem := make(chan struct{}, nrThreads)
 	return polyMulKaratsubaParallelCoarse(p, q, sem)
 }
 
-func polyMulKaratsubaParallelCoarse(p, q []int, sem chan struct{}) []int {
+func polyMulKaratsubaParallelCoarse(p, q []*big.Int, sem chan struct{}) []*big.Int {
 	lenP := len(p)
 	lenQ := len(q)
 
@@ -114,11 +98,9 @@ func polyMulKaratsubaParallelCoarse(p, q []int, sem chan struct{}) []int {
 	p1, p2 := pPadded[n:], pPadded[:n] // High, Low
 	q1, q2 := qPadded[n:], qPadded[:n] // High, Low
 
-	// --- Parallel Execution (3 Goroutines) ---
 	var wg sync.WaitGroup
 	wg.Add(2)
-
-	var RHigh, RLow, RMidTerm []int
+	var RHigh, RLow, RMidTerm []*big.Int
 
 	// RHigh = P1 * Q1
 	select {
@@ -135,9 +117,7 @@ func polyMulKaratsubaParallelCoarse(p, q []int, sem chan struct{}) []int {
 		wg.Done()
 	}
 
-	// Try to acquire another slot
 	// RLow = P2 * Q2
-
 	select {
 	case sem <- struct{}{}:
 		// SUCCESS: We got a slot. Run in a new goroutine.
@@ -167,7 +147,7 @@ func polyMulKaratsubaParallelCoarse(p, q []int, sem chan struct{}) []int {
 // This version spawns 2 new goroutines at *every* recursive step,
 // creating an exponential number of goroutines.
 
-func PolyMulKaratsubaParallelFine(p, q []int) []int {
+func PolyMulKaratsubaParallelFine(p, q []*big.Int) []*big.Int {
 	lenP := len(p)
 	lenQ := len(q)
 
@@ -190,7 +170,7 @@ func PolyMulKaratsubaParallelFine(p, q []int) []int {
 	var wg sync.WaitGroup
 	wg.Add(2) // We'll spawn 2 new goroutines, and do 1 on the current thread
 
-	var RHigh, RLow, RMidTerm []int
+	var RHigh, RLow, RMidTerm []*big.Int
 
 	// Goroutine 1: RHigh = P1 * Q1
 	go func() {
@@ -214,58 +194,80 @@ func PolyMulKaratsubaParallelFine(p, q []int) []int {
 	return combineKaratsubaResults(RHigh, RMidTerm, RLow, m, n, lenP, lenQ)
 }
 
-func combineKaratsubaResults(RHigh, RMidTerm, RLow []int, m, n, lenP, lenQ int) []int {
+func combineKaratsubaResults(RHigh, RMidTerm, RLow []*big.Int, m, n, lenP, lenQ int) []*big.Int {
 	// Perform the Karatsuba trick to get the middle term
 	RMidSub1 := polySub(RMidTerm, RHigh)
 	RMid := polySub(RMidSub1, RLow)
 
-	// Allocate the padded result array
-	resultPadded := make([]int, m*2)
+	resultPadded := make([]*big.Int, m*2)
+	for i := range resultPadded {
+		resultPadded[i] = big.NewInt(0)
+	}
 
 	// Combine: Result = R_low + (R_mid * X^n) + (R_high * X^2n)
-	copy(resultPadded, RLow)
-	for i, v := range RMid {
-		resultPadded[i+n] += v
+	for i, v := range RLow {
+		resultPadded[i].Add(resultPadded[i], v)
 	}
+	// Add RMid (starts at index n)
+	for i, v := range RMid {
+		resultPadded[i+n].Add(resultPadded[i+n], v)
+	}
+	// Add RHigh (starts at index 2*n)
 	for i, v := range RHigh {
-		resultPadded[i+2*n] += v
+		resultPadded[i+2*n].Add(resultPadded[i+2*n], v)
 	}
 
-	// Trim the padded result to the correct final length
+	// Trim the padded result to the correct final length (in case the making m++ to have an even length altered the result)
 	finalLen := lenP + lenQ - 1
 	if finalLen <= 0 {
-		return []int{}
+		return []*big.Int{}
 	}
 	return resultPadded[:finalLen]
 }
 
-func polyAdd(p, q []int) []int {
-	maxLen := max(len(p), len(q))
-	res := make([]int, maxLen)
-	copy(res, p)
+func polyAdd(p, q []*big.Int) []*big.Int {
+	lenP, lenQ := len(p), len(q)
+	maxLen := max(lenP, lenQ)
+	res := make([]*big.Int, maxLen)
 
-	for i := 0; i < len(q); i++ {
-		res[i] += q[i]
+	for i := 0; i < maxLen; i++ {
+		res[i] = big.NewInt(0) // Initialize all to 0
+		if i < lenP {
+			res[i].Add(res[i], p[i])
+		}
+		if i < lenQ {
+			res[i].Add(res[i], q[i])
+		}
 	}
 	return res
 }
 
-func polySub(p, q []int) []int {
-	maxLen := max(len(p), len(q))
-	res := make([]int, maxLen)
-	copy(res, p)
+func polySub(p, q []*big.Int) []*big.Int {
+	lenP, lenQ := len(p), len(q)
+	maxLen := max(lenP, lenQ)
+	res := make([]*big.Int, maxLen)
 
-	for i := 0; i < len(q); i++ {
-		res[i] -= q[i]
+	for i := 0; i < maxLen; i++ {
+		res[i] = big.NewInt(0) // Initialize all to 0
+		if i < lenP {
+			res[i].Add(res[i], p[i]) // res[i] = p[i]
+		}
+		if i < lenQ {
+			res[i].Sub(res[i], q[i]) // res[i] = res[i] - q[i]
+		}
 	}
 	return res
 }
 
-func pad(p []int, length int) []int {
+func pad(p []*big.Int, length int) []*big.Int {
 	if len(p) >= length {
 		return p
 	}
-	newP := make([]int, length)
+	newP := make([]*big.Int, length)
 	copy(newP, p)
+
+	for i := len(p); i < length; i++ {
+		newP[i] = big.NewInt(0)
+	}
 	return newP
 }

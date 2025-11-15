@@ -7,7 +7,7 @@ namespace lab4_client
     public class AsyncDownloader : Downloader
     {
 
-        public AsyncDownloader(IPAddress address, int port, string fileName) : base(address, port, fileName) { }
+        public AsyncDownloader(IPAddress address, int port,string hostName, string path) : base(address, port, hostName, path) { }
 
 
         override public async Task Run()
@@ -17,11 +17,11 @@ namespace lab4_client
 
             try
             {
-                Console.WriteLine($"Connecting for {fileName}...");
+                // Console.WriteLine($"Connecting for {path}...");
                 await ConnectAsync(conn, endPoint);
-                Console.WriteLine($"Connected! ({fileName})");
+                // Console.WriteLine($"Connected! ({path})");
 
-                string request = $"GET {fileName} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+                string request = $"GET {path} HTTP/1.1\r\nHost: {hostName}\r\nConnection: close\r\n\r\n";
                 byte[] toSendBytes = Encoding.UTF8.GetBytes(request);
                 int sent = await SendAsync(conn, toSendBytes);
 
@@ -52,7 +52,7 @@ namespace lab4_client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error {fileName}: {ex.Message}");
+                Console.WriteLine($"Error {path}: {ex.Message}");
                 conn.Close();
             }
         }
@@ -78,7 +78,7 @@ namespace lab4_client
                     }
                 }
             }
-            Console.WriteLine($"Headers parsed for {fileName}. Content-Length: {contentLength}");
+            // Console.WriteLine($"Headers parsed for {path}. Content-Length: {contentLength}");
         }
 
         private bool CheckBodyComplete(string respStr, bool headersParsed, int contentLength)
@@ -91,7 +91,7 @@ namespace lab4_client
 
             if (contentLength == -1)
             {
-                Console.WriteLine($"[Client 3] Cannot find Content-Length for {fileName}.");
+                Console.WriteLine($"Cannot find Content-Length for {path}.");
                 throw new Exception("No Content-Length header found.");
             }
 
@@ -101,7 +101,7 @@ namespace lab4_client
             if (bodyLength >= contentLength)
             {
                 string body = respStr.Substring(bodyStart, contentLength);
-                Console.WriteLine($"\n---[Client 3] File {fileName} Content---\n{body}\n-----------------------------------\n");
+                Console.WriteLine($"\n---File {path} Content---\n{body}\n");
                 return true; 
             }
 
