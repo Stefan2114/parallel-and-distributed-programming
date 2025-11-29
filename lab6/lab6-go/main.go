@@ -12,13 +12,13 @@ import (
 func main() {
 
 	rand.New(rand.NewSource(time.Now().UnixNano()))
-	numThreads := 100
+	numThreads := 10
 	startVertex := 0
-	// nrVertices := 40
-	// nrEdges := nrVertices * 5
+	nrVertices := 1000
+	nrEdges := nrVertices * 2
 
-	// g := graph.NewRandomGraph(nrVertices, nrEdges)
-	g, err := graph.NewGraphFromFile("graph1.txt")
+	g := graph.NewRandomGraph(nrVertices, nrEdges)
+	//g, err := graph.NewGraphFromFile("graph2.txt")
 	fmt.Println("Graph created")
 
 	s1 := solver.NewReusableThreadsSolver(g)
@@ -33,11 +33,11 @@ func main() {
 	elapsed = time.Since(start)
 	fmt.Printf("Time for non reusable one is: %v\n", elapsed)
 
-	//s3 := solver.NewSolver(g)
-	//start = time.Now()
-	//solution, err = s3.FindCycle(1, startVertex)
-	//elapsed = time.Since(start)
-	//fmt.Printf("Time for no parallel one is: %v\n", elapsed)
+	s3 := solver.NewSolver(g)
+	start = time.Now()
+	solution, err = s3.FindCycle(1, startVertex)
+	elapsed = time.Since(start)
+	fmt.Printf("Time for no parallel one is: %v\n", elapsed)
 
 	if err != nil {
 		log.Printf("Search complete: %v\n", err)
