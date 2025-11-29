@@ -41,13 +41,16 @@ func (g *Graph) NumVertices() int {
 
 func NewRandomGraph(nrVertices, edges int) *Graph {
 	g := &Graph{nrVertices: nrVertices, adjList: make(map[int][]int)}
-	for i := 0; i < edges; i++ {
-		from := rand.IntN(nrVertices)
-		to := rand.IntN(nrVertices)
-		for from == to || g.edgeAlreadyExists(from, to) {
-			to = rand.IntN(nrVertices)
+	for i := 0; i < nrVertices; i++ {
+		for j := 0; j < nrVertices; j++ {
+			if i != j {
+				nr := rand.IntN(10)
+				if nr < 2 {
+					g.AddEdge(i, j)
+				}
+			}
 		}
-		g.AddEdge(from, to)
+
 	}
 	return g
 }
