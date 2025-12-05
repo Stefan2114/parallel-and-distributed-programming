@@ -1,8 +1,8 @@
 package dsm
 
-type VariableState struct {
-	ID    int
-	Value int
+type VarState struct {
+	Value   int
+	Version int
 }
 
 type WriteRequest struct {
@@ -21,11 +21,13 @@ type CASRequest struct {
 type CASResponse struct {
 	Success      bool
 	CurrentValue int
+	Version      int
 }
 
 type UpdateMessage struct {
 	VarID    int
 	NewValue int
+	Version  int
 }
 
 type Ack struct{}
