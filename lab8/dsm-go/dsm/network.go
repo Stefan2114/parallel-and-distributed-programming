@@ -62,7 +62,7 @@ func (t *Transport) ConnectPeers(procs []config.Process) {
 					return
 				}
 
-				time.Sleep(2 * time.Second)
+				time.Sleep(1 * time.Second)
 			}
 		}(p)
 	}
@@ -95,18 +95,17 @@ func (t *Transport) SendCASRequest(ownerID int, varID, oldVal, newVal int) (bool
 	return reply.Success, err
 }
 
-func (t *Transport) BroadcastUpdate(vConf config.VariableConfig, varID, val int) {
+func (t *Transport) BroadcastUpdate(vConf config.VariableConfig, varID, val int, version int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	args := UpdateMessage{VarID: varID, NewValue: val}
+	args := UpdateMessage{VarID: varID, NewValue: val, Version: version}
 
 	for _, subID := range vConf.Subscribers {
 		if subID == t.dsm.SelfID {
-			continue // Don't send to self
+			continue
 		}
 		if client, ok := t.peers[subID]; ok {
-			// Async call to prevent blocking the owner
 			go func(c *rpc.Client, id int) {
 				var reply Ack
 				if err := c.Call("RPCHandler.ReceiveUpdate", args, &reply); err != nil {
@@ -122,7 +121,7 @@ type RPCHandler struct {
 }
 
 func (h *RPCHandler) ReceiveUpdate(args UpdateMessage, reply *Ack) error {
-	h.dsm.ApplyUpdate(args.VarID, args.NewValue)
+	h.dsm.ApplyUpdate(args.VarID, args.NewValue, args.Version)
 	return nil
 }
 
@@ -132,25 +131,33 @@ func (h *RPCHandler) HandleWriteRequest(args WriteRequest, reply *Ack) error {
 
 func (h *RPCHandler) HandleCASRequest(args CASRequest, reply *CASResponse) error {
 	h.dsm.mu.Lock()
-	current := h.dsm.Data[args.VarID]
 
-	if current == args.OldValue {
-		h.dsm.Data[args.VarID] = args.NewValue
+	currentState := h.dsm.Data[args.VarID]
+
+	if currentState.Value == args.OldValue {
+		newVersion := currentState.Version + 1
+
+		h.dsm.Data[args.VarID] = VarState{
+			Value:   args.NewValue,
+			Version: newVersion,
+		}
 		h.dsm.mu.Unlock()
 
 		reply.Success = true
 		reply.CurrentValue = args.NewValue
+		reply.Version = newVersion
 
 		if h.dsm.Callback != nil {
 			go h.dsm.Callback(args.VarID, args.OldValue, args.NewValue)
 		}
 
 		vConf, _ := h.dsm.Config[args.VarID]
-		h.dsm.Transport.BroadcastUpdate(vConf, args.VarID, args.NewValue)
+		h.dsm.Transport.BroadcastUpdate(vConf, args.VarID, args.NewValue, newVersion)
 	} else {
 		h.dsm.mu.Unlock()
 		reply.Success = false
-		reply.CurrentValue = current
+		reply.CurrentValue = currentState.Value
+		reply.Version = currentState.Version
 	}
 	return nil
 }

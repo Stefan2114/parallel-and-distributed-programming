@@ -10,6 +10,7 @@ type VariableConfig struct {
 	ID          int
 	OwnerID     int
 	Subscribers []int
+	State       int
 }
 
 var AllProcesses = []Process{{ID: 0, Port: "8080", Host: "localhost"},

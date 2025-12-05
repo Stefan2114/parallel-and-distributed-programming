@@ -12,7 +12,7 @@ type CallbackFunc func(varID int, oldVal int, newVal int)
 
 type DSM struct {
 	SelfID   int
-	Data     map[int]int
+	Data     map[int]VarState
 	Config   map[int]config.VariableConfig
 	Callback CallbackFunc
 
@@ -24,7 +24,7 @@ type DSM struct {
 func NewDSM(selfID int, port string, cb CallbackFunc) *DSM {
 	d := &DSM{
 		SelfID:   selfID,
-		Data:     make(map[int]int),
+		Data:     make(map[int]VarState),
 		Config:   make(map[int]config.VariableConfig),
 		Callback: cb,
 	}
@@ -39,7 +39,7 @@ func NewDSM(selfID int, port string, cb CallbackFunc) *DSM {
 		}
 		if isSubscriber {
 			d.Config[vConf.ID] = vConf
-			d.Data[vConf.ID] = 0
+			d.Data[vConf.ID] = VarState{Value: 0, Version: 0}
 		}
 	}
 
@@ -56,8 +56,8 @@ func NewDSM(selfID int, port string, cb CallbackFunc) *DSM {
 func (d *DSM) Get(varID int) (int, bool) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	val, ok := d.Data[varID]
-	return val, ok
+	state, ok := d.Data[varID]
+	return state.Value, ok
 }
 
 func (d *DSM) Write(varID int, val int) error {
@@ -81,16 +81,21 @@ func (d *DSM) CompareAndExchange(varID int, oldVal int, newVal int) (bool, error
 
 	if vConf.OwnerID == d.SelfID {
 		d.mu.Lock()
-		current := d.Data[varID]
-		if current == oldVal {
-			d.Data[varID] = newVal
+		currentState := d.Data[varID]
+
+		if currentState.Value == oldVal {
+			newState := VarState{
+				Value:   newVal,
+				Version: currentState.Version + 1,
+			}
+			d.Data[varID] = newState
 			d.mu.Unlock()
 
 			if d.Callback != nil {
-				go d.Callback(varID, oldVal, newVal)
+				go d.Callback(varID, currentState.Value, newVal)
 			}
 
-			d.Transport.BroadcastUpdate(vConf, varID, newVal)
+			d.Transport.BroadcastUpdate(vConf, varID, newVal, newState.Version)
 			return true, nil
 		}
 		d.mu.Unlock()
@@ -102,30 +107,50 @@ func (d *DSM) CompareAndExchange(varID int, oldVal int, newVal int) (bool, error
 
 func (d *DSM) coordinateUpdate(varID int, newVal int) error {
 	d.mu.Lock()
-	oldVal := d.Data[varID]
-	d.Data[varID] = newVal
+
+	currentState := d.Data[varID]
+	oldVal := currentState.Value
+
+	newState := VarState{
+		Value:   newVal,
+		Version: currentState.Version + 1,
+	}
+	d.Data[varID] = newState
+
 	d.mu.Unlock()
 
-	log.Printf("[DSM] Owner updating Var %d: %d -> %d", varID, oldVal, newVal)
+	log.Printf("[DSM] Owner updated Var %d: %d -> %d (Ver %d)", varID, oldVal, newVal, newState.Version)
 
 	if d.Callback != nil {
 		go d.Callback(varID, oldVal, newVal)
 	}
 
 	vConf := d.Config[varID]
-	d.Transport.BroadcastUpdate(vConf, varID, newVal)
+	d.Transport.BroadcastUpdate(vConf, varID, newVal, newState.Version)
 	return nil
 }
 
-func (d *DSM) ApplyUpdate(varID int, newVal int) {
+func (d *DSM) ApplyUpdate(varID int, newVal int, newVersion int) {
 	d.mu.Lock()
-	oldVal := d.Data[varID]
-	d.Data[varID] = newVal
-	d.mu.Unlock()
+	defer d.mu.Unlock()
 
-	log.Printf("[DSM] Replica updated Var %d: %d -> %d", varID, oldVal, newVal)
+	currentState := d.Data[varID]
 
-	if d.Callback != nil {
-		d.Callback(varID, oldVal, newVal)
+	if newVersion > currentState.Version {
+		oldVal := currentState.Value
+
+		d.Data[varID] = VarState{
+			Value:   newVal,
+			Version: newVersion,
+		}
+
+		log.Printf("[DSM] Replica accepted update Var %d: %d (Ver %d)", varID, newVal, newVersion)
+
+		if d.Callback != nil {
+			go d.Callback(varID, oldVal, newVal)
+		}
+	} else {
+		log.Printf("[DSM] Replica IGNORED stale update Var %d (Incoming Ver %d <= Local Ver %d)",
+			varID, newVersion, currentState.Version)
 	}
 }
